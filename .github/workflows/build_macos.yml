@@ -1,0 +1,222 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      velvet_ref:
+        description: Velvet tag to build and release (e.g. v0.7.0)
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux:
+    name: Build linux-x86_64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install V
+        uses: vlang/setup-v@v1.4
+        with:
+          check-latest: true
+
+      - name: Checkout velvet
+        uses: actions/checkout@v4
+        with:
+          repository: DaZhi-the-Revelator/velvet
+          ref: ${{ github.event.inputs.velvet_ref }}
+          submodules: true
+
+      - name: Build
+        run: v build.vsh release
+
+      - name: Verify binary
+        run: ./bin/velvet --version
+
+      - name: Stage archive
+        run: |
+          mkdir -p staging
+          cp bin/velvet staging/
+          cp README.md LICENSE staging/
+          tar -czf velvet-linux-x86_64.tar.gz -C staging .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: velvet-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  build-windows:
+    name: Build windows-x86_64
+    runs-on: windows-latest
+
+    steps:
+      - name: Install V
+        uses: vlang/setup-v@v1.4
+        with:
+          check-latest: true
+
+      - name: Checkout velvet
+        uses: actions/checkout@v4
+        with:
+          repository: DaZhi-the-Revelator/velvet
+          ref: ${{ github.event.inputs.velvet_ref }}
+          submodules: true
+
+      - name: Build
+        run: v build.vsh release
+
+      - name: Verify binary
+        run: .\bin\velvet.exe --version
+
+      - name: Stage archive
+        run: |
+          mkdir staging
+          copy bin\velvet.exe staging\
+          copy README.md staging\
+          copy LICENSE staging\
+          Compress-Archive -Path staging\* -DestinationPath velvet-windows-x86_64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: velvet-windows-x86_64.zip
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+      fail-fast: false
+    runs-on: macos-latest
+
+    steps:
+      - name: Install V
+        uses: vlang/setup-v@v1.4
+        with:
+          check-latest: true
+
+      - name: Checkout velvet
+        uses: actions/checkout@v4
+        with:
+          repository: DaZhi-the-Revelator/velvet
+          ref: ${{ github.event.inputs.velvet_ref }}
+          submodules: true
+
+      - name: Build (${{ matrix.arch }})
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          if [ "$ARCH" = "arm64" ]; then
+            export VFLAGS="-cflags '-target arm64-apple-darwin'"
+          else
+            export VFLAGS="-cflags '-target x86_64-apple-darwin'"
+          fi
+          v build.vsh release
+          mv bin/velvet bin/velvet-${{ matrix.arch }}
+
+      - name: Verify binary
+        run: |
+          file bin/velvet-${{ matrix.arch }}
+          if [ "${{ matrix.arch }}" = "$(uname -m)" ]; then
+            bin/velvet-${{ matrix.arch }} --version
+          else
+            echo "Cross-compiled binary; skipping execution check on this runner."
+          fi
+
+      - name: Stage archive
+        run: |
+          mkdir -p staging
+          cp bin/velvet-${{ matrix.arch }} staging/velvet
+          cp README.md LICENSE staging/
+          tar -czf velvet-macos-${{ matrix.arch }}.tar.gz -C staging .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: velvet-macos-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Create Codeberg Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout velvet
+        uses: actions/checkout@v4
+        with:
+          repository: DaZhi-the-Revelator/velvet
+          ref: ${{ github.event.inputs.velvet_ref }}
+          sparse-checkout: CHANGELOG.md
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+            -exec cp {} release-assets/ \;
+          ls -lh release-assets/
+
+      - name: Extract changelog body
+        id: changelog
+        run: |
+          TAG="${{ github.event.inputs.velvet_ref }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          python3 - "${TAG}" <<'PYEOF' > body.txt
+          import sys, re, pathlib
+
+          tag = sys.argv[1]
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+
+          pattern = rf"(?m)^## \[{re.escape(tag)}\].*?\n(.*?)(?=^## \[|\Z)"
+          m = re.search(pattern, text, re.DOTALL)
+
+          print(m.group(1).strip() if m else "")
+          PYEOF
+
+          echo "Body extracted: $(wc -c < body.txt) bytes"
+
+      - name: Create Codeberg release and upload assets
+        env:
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          TAG: ${{ steps.changelog.outputs.tag }}
+          API: https://codeberg.org/api/v1
+          REPO: DaZhi-the-Revelator/velvet
+        run: |
+          set -e
+
+          RELEASE_ID=$(curl -sf -X POST \
+            -H "Authorization: token ${CODEBERG_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary "$(jq -n \
+              --arg tag "${TAG}" \
+              --rawfile body body.txt \
+              '{tag_name:$tag,name:$tag,body:$body,draft:false,prerelease:false}')" \
+            "${API}/repos/${REPO}/releases" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+          echo "Release ID: ${RELEASE_ID}"
+
+          for asset in release-assets/*; do
+            name=$(basename "$asset")
+            echo "Uploading ${name}..."
+            curl -sf -X POST \
+              -H "Authorization: token ${CODEBERG_TOKEN}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@${asset}" \
+              "${API}/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${name}"
+          done
+
+          echo "Release ${TAG} published to Codeberg."
