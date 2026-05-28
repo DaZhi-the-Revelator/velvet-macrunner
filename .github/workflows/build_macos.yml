@@ -11,6 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  VELVET_REF: ${{ github.event.inputs.velvet_ref }}
+  CODEBERG_REPO: https://codeberg.org/DaZhi-the-Revelator/velvet.git
+
 jobs:
   build-linux:
     name: Build linux-x86_64
@@ -23,24 +27,26 @@ jobs:
           check-latest: true
 
       - name: Checkout velvet
-        uses: actions/checkout@v4
-        with:
-          repository: DaZhi-the-Revelator/velvet
-          ref: ${{ github.event.inputs.velvet_ref }}
-          submodules: true
+        run: |
+          git clone --depth=1 --branch "$VELVET_REF" \
+            "https://codeberg.org/DaZhi-the-Revelator/velvet.git" velvet
+          cd velvet && git submodule update --init --recursive
 
       - name: Build
+        working-directory: velvet
         run: v build.vsh release
 
       - name: Verify binary
+        working-directory: velvet
         run: ./bin/velvet --version
 
       - name: Stage archive
+        working-directory: velvet
         run: |
           mkdir -p staging
           cp bin/velvet staging/
           cp README.md LICENSE staging/
-          tar -czf velvet-linux-x86_64.tar.gz -C staging .
+          tar -czf ../velvet-linux-x86_64.tar.gz -C staging .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -60,25 +66,28 @@ jobs:
           check-latest: true
 
       - name: Checkout velvet
-        uses: actions/checkout@v4
-        with:
-          repository: DaZhi-the-Revelator/velvet
-          ref: ${{ github.event.inputs.velvet_ref }}
-          submodules: true
+        run: |
+          git clone --depth=1 --branch "$env:VELVET_REF" `
+            "https://codeberg.org/DaZhi-the-Revelator/velvet.git" velvet
+          cd velvet
+          git submodule update --init --recursive
 
       - name: Build
+        working-directory: velvet
         run: v build.vsh release
 
       - name: Verify binary
+        working-directory: velvet
         run: .\bin\velvet.exe --version
 
       - name: Stage archive
+        working-directory: velvet
         run: |
           mkdir staging
           copy bin\velvet.exe staging\
           copy README.md staging\
           copy LICENSE staging\
-          Compress-Archive -Path staging\* -DestinationPath velvet-windows-x86_64.zip
+          Compress-Archive -Path staging\* -DestinationPath ..\velvet-windows-x86_64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -102,13 +111,13 @@ jobs:
           check-latest: true
 
       - name: Checkout velvet
-        uses: actions/checkout@v4
-        with:
-          repository: DaZhi-the-Revelator/velvet
-          ref: ${{ github.event.inputs.velvet_ref }}
-          submodules: true
+        run: |
+          git clone --depth=1 --branch "$VELVET_REF" \
+            "https://codeberg.org/DaZhi-the-Revelator/velvet.git" velvet
+          cd velvet && git submodule update --init --recursive
 
       - name: Build (${{ matrix.arch }})
+        working-directory: velvet
         env:
           ARCH: ${{ matrix.arch }}
         run: |
@@ -121,6 +130,7 @@ jobs:
           mv bin/velvet bin/velvet-${{ matrix.arch }}
 
       - name: Verify binary
+        working-directory: velvet
         run: |
           file bin/velvet-${{ matrix.arch }}
           if [ "${{ matrix.arch }}" = "$(uname -m)" ]; then
@@ -130,11 +140,12 @@ jobs:
           fi
 
       - name: Stage archive
+        working-directory: velvet
         run: |
           mkdir -p staging
           cp bin/velvet-${{ matrix.arch }} staging/velvet
           cp README.md LICENSE staging/
-          tar -czf velvet-macos-${{ matrix.arch }}.tar.gz -C staging .
+          tar -czf ../velvet-macos-${{ matrix.arch }}.tar.gz -C staging .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -149,12 +160,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout velvet
-        uses: actions/checkout@v4
-        with:
-          repository: DaZhi-the-Revelator/velvet
-          ref: ${{ github.event.inputs.velvet_ref }}
-          sparse-checkout: CHANGELOG.md
+      - name: Checkout velvet CHANGELOG
+        run: |
+          git clone --depth=1 --branch "$VELVET_REF" \
+            "https://codeberg.org/DaZhi-the-Revelator/velvet.git" velvet
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -178,7 +187,7 @@ jobs:
           import sys, re, pathlib
 
           tag = sys.argv[1]
-          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          text = pathlib.Path("velvet/CHANGELOG.md").read_text(encoding="utf-8")
 
           pattern = rf"(?m)^## \[{re.escape(tag)}\].*?\n(.*?)(?=^## \[|\Z)"
           m = re.search(pattern, text, re.DOTALL)
