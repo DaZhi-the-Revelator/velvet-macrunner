@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Install V ${{ env.V_VERSION }}
-        run: |
-          curl -fsSL "${V_BASE_URL}/v_linux.zip" -o v_linux.zip
-          unzip -q v_linux.zip
-          echo "$PWD/v" >> "$GITHUB_PATH"
+        uses: prantlf/setup-v-action@v2
+        with:
+          version: ${{ env.V_VERSION }}
+          install-dependencies: false
 
       - name: Verify V version
         run: v version
@@ -68,11 +68,10 @@ jobs:
 
     steps:
       - name: Install V ${{ env.V_VERSION }}
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "$env:V_BASE_URL/v_windows.zip" -OutFile v_windows.zip
-          Expand-Archive v_windows.zip -DestinationPath .
-          "$PWD\v" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        uses: prantlf/setup-v-action@v2
+        with:
+          version: ${{ env.V_VERSION }}
+          install-dependencies: false
 
       - name: Verify V version
         run: v version
@@ -118,10 +117,10 @@ jobs:
 
     steps:
       - name: Install V ${{ env.V_VERSION }}
-        run: |
-          curl -fsSL "${V_BASE_URL}/v_macos.zip" -o v_macos.zip
-          unzip -q v_macos.zip
-          echo "$PWD/v" >> "$GITHUB_PATH"
+        uses: prantlf/setup-v-action@v2
+        with:
+          version: ${{ env.V_VERSION }}
+          install-dependencies: false
 
       - name: Verify V version
         run: v version
