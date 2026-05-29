@@ -14,12 +14,9 @@ concurrency:
 env:
   VELVET_REF: ${{ github.event.inputs.velvet_ref }}
   CODEBERG_REPO: https://codeberg.org/DaZhi-the-Revelator/velvet.git
-  # Pin V to the exact commit velvet is tested against.
-  # Bump this when you intentionally upgrade V.
-  V_COMMIT: 0c3183c
-  # Suppress the Node.js 20 deprecation warning from vlang/setup-v@v1.4.
-  # Remove once setup-v ships a Node 24-based release.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Pre-built release zip base URL — bump V_VERSION when upgrading V.
+  V_VERSION: 0.5.1
+  V_BASE_URL: https://github.com/vlang/v/releases/download/0.5.1
 
 jobs:
   build-linux:
@@ -27,10 +24,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install V
-        uses: vlang/setup-v@v1.4
-        with:
-          version: ${{ env.V_COMMIT }}
+      - name: Install V ${{ env.V_VERSION }}
+        run: |
+          curl -fsSL "${V_BASE_URL}/v_linux.zip" -o v_linux.zip
+          unzip -q v_linux.zip
+          echo "$PWD/v" >> "$GITHUB_PATH"
+
+      - name: Verify V version
+        run: v version
 
       - name: Checkout velvet
         run: |
@@ -40,7 +41,7 @@ jobs:
 
       - name: Build
         working-directory: velvet
-        run: v build.vsh release
+        run: v run build.vsh release
 
       - name: Verify binary
         working-directory: velvet
@@ -66,10 +67,15 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Install V
-        uses: vlang/setup-v@v1.4
-        with:
-          version: ${{ env.V_COMMIT }}
+      - name: Install V ${{ env.V_VERSION }}
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "$env:V_BASE_URL/v_windows.zip" -OutFile v_windows.zip
+          Expand-Archive v_windows.zip -DestinationPath .
+          "$PWD\v" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify V version
+        run: v version
 
       - name: Checkout velvet
         run: |
@@ -80,7 +86,7 @@ jobs:
 
       - name: Build
         working-directory: velvet
-        run: v build.vsh release
+        run: v run build.vsh release
 
       - name: Verify binary
         working-directory: velvet
@@ -111,10 +117,14 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Install V
-        uses: vlang/setup-v@v1.4
-        with:
-          version: ${{ env.V_COMMIT }}
+      - name: Install V ${{ env.V_VERSION }}
+        run: |
+          curl -fsSL "${V_BASE_URL}/v_macos.zip" -o v_macos.zip
+          unzip -q v_macos.zip
+          echo "$PWD/v" >> "$GITHUB_PATH"
+
+      - name: Verify V version
+        run: v version
 
       - name: Checkout velvet
         run: |
@@ -132,7 +142,7 @@ jobs:
           else
             export VFLAGS="-cflags '-target x86_64-apple-darwin'"
           fi
-          v build.vsh release
+          v run build.vsh release
           mv bin/velvet bin/velvet-${{ matrix.arch }}
 
       - name: Verify binary
