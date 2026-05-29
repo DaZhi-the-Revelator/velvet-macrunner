@@ -17,6 +17,7 @@ env:
   # Pre-built release zip base URL — bump V_VERSION when upgrading V.
   V_VERSION: 0.5.1
   V_BASE_URL: https://github.com/vlang/v/releases/download/0.5.1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-linux:
@@ -56,7 +57,7 @@ jobs:
           tar -czf ../velvet-linux-x86_64.tar.gz -C staging .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: linux-x86_64
           path: velvet-linux-x86_64.tar.gz
@@ -101,7 +102,7 @@ jobs:
           Compress-Archive -Path staging\* -DestinationPath ..\velvet-windows-x86_64.zip
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-x86_64
           path: velvet-windows-x86_64.zip
@@ -115,7 +116,7 @@ jobs:
           - arch: arm64
             runner: macos-latest
           - arch: x86_64
-            runner: macos-13
+            runner: macos-15-intel
       fail-fast: false
     runs-on: ${{ matrix.runner }}
 
@@ -160,7 +161,7 @@ jobs:
           tar -czf ../velvet-macos-${{ matrix.arch }}.tar.gz -C staging .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-${{ matrix.arch }}
           path: velvet-macos-${{ matrix.arch }}.tar.gz
@@ -178,7 +179,7 @@ jobs:
             "https://codeberg.org/DaZhi-the-Revelator/velvet.git" velvet
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
 
