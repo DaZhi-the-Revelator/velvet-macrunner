@@ -111,9 +111,13 @@ jobs:
     name: Build macOS (${{ matrix.arch }})
     strategy:
       matrix:
-        arch: [arm64, x86_64]
+        include:
+          - arch: arm64
+            runner: macos-latest
+          - arch: x86_64
+            runner: macos-13
       fail-fast: false
-    runs-on: macos-latest
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Install V ${{ env.V_VERSION }}
@@ -133,14 +137,7 @@ jobs:
 
       - name: Build (${{ matrix.arch }})
         working-directory: velvet
-        env:
-          ARCH: ${{ matrix.arch }}
         run: |
-          if [ "$ARCH" = "arm64" ]; then
-            export VFLAGS="-cflags '-target arm64-apple-darwin'"
-          else
-            export VFLAGS="-cflags '-target x86_64-apple-darwin'"
-          fi
           v run build.vsh release
           mv bin/velvet bin/velvet-${{ matrix.arch }}
 
